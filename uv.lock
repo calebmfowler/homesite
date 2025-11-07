@@ -159,11 +159,16 @@ wheels = [
 [[package]]
 name = "homesite"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "pandas" },
     { name = "plotly" },
     { name = "streamlit" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "homesite" },
 ]
 
 [package.metadata]
@@ -172,6 +177,9 @@ requires-dist = [
     { name = "plotly", specifier = ">=6.4.0" },
     { name = "streamlit", specifier = ">=1.51.0" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "homesite", editable = "." }]
 
 [[package]]
 name = "idna"
