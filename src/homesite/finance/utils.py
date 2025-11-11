@@ -1,13 +1,49 @@
+from homesite.utils import APP_ROOT, PRODUCTION_DATA, PRODUCTION_ENV, SECRETS
+
 from datetime import datetime
-from numpy import ndarray, float64, floor
-from re import match
-from pandas import DataFrame, Series, concat, read_csv, to_datetime, to_numeric
-from pathlib import Path
+import numpy as np
+import pandas as pd
+from pandas import DataFrame, Series
+import plaid
+from plaid.api import plaid_api
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from homesite.config import DATA_DIR
+from re import match
 
-class TransactionCategories:
+class Plaid:
+    def __init__(self, enviroment: str) -> None:
+        configuration = plaid.Configuration(
+            host=plaid.Environment.Production if enviroment == "Production" else plaid.Environment.Sandbox,
+            api_key={
+                "clientId": SECRETS["plaid"]["client_id"],
+                "secret": SECRETS["plaid"]["production_key"] if enviroment == "Production" else SECRETS["plaid"]["sandbox_key"],
+            }
+        )
+        self.api_client = plaid.ApiClient(configuration)
+        self.client = plaid_api.PlaidApi(self.api_client)
+
+    def get_link_token(self, link_type) -> dict:
+        request = dict(
+            client_name="homesite-finance",
+            user=dict(
+                client_user_id="developer",
+                phone_number="+1 512 7517358"
+            ),
+            language="en",
+            country_codes=["US"],
+            products=link_type,
+            transactions=dict(days_requested=1)
+        )
+
+        return self.client.link_token_create(request).to_dict()
+
+    def get_access_token(self, public_token: str) -> None:
+        request = dict(public_token=public_token)
+
+        return self.client.item_public_token_exchange(request).to_dict()
+
+
+class Categories:
     def __init__(self):
         def salary(transaction: Series):
             return match(r"^SAMSUNG AUSTIN S PAYROLL", transaction["description"]) and not bonus(transaction)
@@ -117,17 +153,48 @@ class TransactionCategories:
 
         return list(traverse_dictionary(self.categories_dict))
 
+
 class Transactions:
-    def __init__(self, csv_filename: str, csv_profile: str, months: int = 1) -> None:
+    def __init__(self, csv_filename: str, csv_profile: str, months: int = 6) -> None:
+        self.plaid = Plaid("Production" if PRODUCTION_DATA else "Sandbox")
+        self.plaid_df = self.get_plaid_transactions(months)
         self.df = self.get_transactions(csv_filename, csv_profile, months)
         self.categorize_transactions()
+
+    def get_plaid_transactions(self, months: int):
+        end_date = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0).date()
+        start_date = end_date.replace(month=end_date.month - months, day=1)
+        
+        request = plaid_api.TransactionsGetRequest(
+            access_token=SECRETS["plaid"]["chase_access_token"] if PRODUCTION_DATA else SECRETS["plaid"]["sandbox_transactions_access_token"],
+            start_date=start_date,
+            end_date=end_date
+        )
+        response = self.plaid.client.transactions_get(request)
+        print(response)
+        transactions: list = response['transactions']
+        print(transactions)
+
+        while len(transactions) < response['total_transactions']:
+            request = plaid_api.TransactionsGetRequest(
+                access_token=SECRETS["plaid"]["chase_access_token"] if PRODUCTION_DATA else SECRETS["plaid"]["sandbox_transactions_access_token"],
+                start_date=start_date,
+                end_date=end_date,
+                options=dict(offset=len(transactions))
+            )
+            response = self.plaid.client.transactions_get(request)
+            transactions.extend(response['transactions'])
+        
+        df = DataFrame(transactions)
+        print(df)
+        return df
 
     def get_transactions(self, csv_filename: str, csv_profile: str, months: int) -> DataFrame:
         end = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         start = end.replace(month=end.month - months, day=1)
         
         if csv_profile == "chase":
-            df = read_csv(DATA_DIR / csv_filename, usecols=range(1, 7)).reset_index(drop=True)
+            df = pd.read_csv(APP_ROOT / "data" / csv_filename, usecols=range(1, 7)).reset_index(drop=True)
             
             df = df.rename(columns={
                 "Posting Date": "date",
@@ -138,10 +205,10 @@ class Transactions:
                 "Check or Slip #": "number"
             })
 
-            df["date"] = to_datetime(df["date"])
-            df["amount"] = to_numeric(df["amount"])
-            df["balance"] = to_numeric(df["balance"])
-            df["number"] = to_numeric(df["number"]).map(lambda num : -1 if num != num else int(num))
+            df["date"] = pd.to_datetime(df["date"])
+            df["amount"] = pd.to_numeric(df["amount"])
+            df["balance"] = pd.to_numeric(df["balance"])
+            df["number"] = pd.to_numeric(df["number"]).map(lambda num : -1 if num != num else int(num))
         
         else:
             raise ValueError(f"Unknown csv_profile: {csv_profile}")
@@ -151,7 +218,7 @@ class Transactions:
     def categorize_transactions(self) -> None:
         self.df["category"] = [[]] * len(self.df)
 
-        categories = TransactionCategories().get_categories()
+        categories = Categories().get_categories()
         def categorize_transaction(t: Series):
             for category in categories:
                 labels, identifier = category
@@ -179,7 +246,7 @@ class Transactions:
         floor_interp = lambda a, b, x: int(a * (1 - x) + b * (x))
 
         def x_to_rgb(x: float) -> tuple[int, int, int]:
-            match floor(6 * x):
+            match np.floor(6 * x):
                 case 0:
                     x = 6 * x
                     return max, floor_interp(min, max, x), min
@@ -204,13 +271,13 @@ class Transactions:
 
         rgb_to_hex = lambda r, g, b: "#%s%s%s" % tuple([hex(c)[2:].rjust(2, "0") for c in (r, g, b)])
 
-        def get_color_array(I: ndarray):
+        def get_color_array(I: np.ndarray):
             X = I / len(self.df)
             h = [rgb_to_hex(*x_to_rgb(x)) for x in X]
 
             return h
 
-        self.df["color"] = get_color_array(self.df.index.to_numpy(float64))
+        self.df["color"] = get_color_array(self.df.index.to_numpy(np.float64))
 
     def visualize_transactions(self) -> tuple[go.Figure, list[DataFrame], list[DataFrame], int]:
 
@@ -233,9 +300,9 @@ class Transactions:
 
         difference = sum(r["amount"]) - sum(e["amount"])
         if difference > 0:
-            e = concat([e, DataFrame({"category": [["surplus"]], "amount": [difference], "color": ["#00000000"]})])
+            e = pd.concat([e, DataFrame({"category": [["surplus"]], "amount": [difference], "color": ["#00000000"]})])
         elif difference < 0:
-            r = concat([r, DataFrame({"category": [["deficit"]], "amount": [-difference], "color": ["#00000000"]})])
+            r = pd.concat([r, DataFrame({"category": [["deficit"]], "amount": [-difference], "color": ["#00000000"]})])
 
         frames: list[go.Frame] = []
         max_granularity = max([len(category) for category in self.df["category"]]) - 1

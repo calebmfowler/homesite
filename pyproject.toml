@@ -6,8 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pandas>=2.3.3",
+    "plaid-python>=37.1.0",
     "plotly>=6.4.0",
     "streamlit>=1.51.0",
+    "streamlit-javascript>=0.1.5",
+    "streamlit-js-eval>=0.1.7",
 ]
 
 [build-system]
@@ -23,7 +26,9 @@ homesite = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "flask>=3.1.2",
     "homesite",
+    "pytest>=9.0.0",
 ]
 
 [tool.pytest.ini_options]

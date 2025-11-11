@@ -3,25 +3,35 @@ from homesite.finance.utils import Transactions
 import streamlit as st
 
 # === Backend ===
-transactions = Transactions("transactions.csv", "chase")
-fig, receipt_agg_list, expenditure_agg_list, max_granularity = transactions.visualize_transactions()
+sest = st.session_state
+
+if "transactions" not in sest:
+    sest.transactions = Transactions("transactions.csv", "chase")
+    sest.fig, sest.receipt_agg_list, sest.expenditure_agg_list, sest.max_granularity = sest.transactions.visualize_transactions()
 
 # === Frontend ===
-st.markdown("## Aggregation")
+st.set_page_config("transactions", "🛒", "wide")
 
-col1, col2 = st.columns([1, 4])
-with col1:
-    st.markdown("#### Granularity")
-    granularity = st.number_input("Granularity", min_value=1, max_value=max_granularity, width=150, label_visibility="collapsed")
-    st.markdown("#### Receipts")
-    st.dataframe(receipt_agg_list[granularity])
-    st.markdown("#### Expenditures")
-    st.dataframe(expenditure_agg_list[granularity])
+if "transactions" in sest:
+    st.markdown("## Aggregation")
 
-with col2:
-    frame = fig.frames[granularity]
-    fig.update(data=frame.data)
-    st.plotly_chart(fig)
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        st.markdown("#### Granularity")
+        granularity = st.number_input("Granularity", min_value=1, max_value=sest.max_granularity, width=150, label_visibility="collapsed")
+        st.markdown("#### Receipts")
+        st.dataframe(sest.receipt_agg_list[granularity])
+        st.markdown("#### Expenditures")
+        st.dataframe(sest.expenditure_agg_list[granularity])
 
-st.markdown("## Tabulation")
-st.dataframe(transactions.df.sort_values(by="date", ascending=False).drop(["number", "color"], axis=1))
+    with col2:
+        frame = sest.fig.frames[granularity]
+        sest.fig.update(data=frame.data)
+        st.plotly_chart(sest.fig)
+
+    st.markdown("## Tabulation")
+    st.dataframe(sest.transactions.df.sort_values(by="date", ascending=False).drop(["number", "color"], axis=1))
+
+
+    st.markdown("## Plaid Tabulation")
+    st.dataframe(sest.transactions.plaid_df)

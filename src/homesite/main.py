@@ -1,17 +1,16 @@
 import streamlit as st
 
 if __name__ == "__main__":
-    st.set_page_config("home", "🪴", "wide")
+    pages = {
+        "home": [
+            st.Page("home/home.py", title="home", icon="🪴")
+        ],
+        "finance": [
+            st.Page("finance/transactions.py", title="transactions", icon="🛒"),
+            st.Page("finance/assets.py", title="assets", icon="🏛️")
+        ],
+    }
 
-    homesite = st.navigation(
-        {
-            "finance": [
-                st.Page("finance/transactions.py", title="transactions", icon="🛒"),
-                st.Page("finance/assets.py", title="assets", icon="🏛️")
-            ],
-        },
-        position="top",
-        expanded=True,
-    )
+    homesite = st.navigation(pages, position="top", expanded=True)
 
     homesite.run()
