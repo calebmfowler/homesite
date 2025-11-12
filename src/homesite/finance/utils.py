@@ -41,6 +41,35 @@ class Plaid:
         request = dict(public_token=public_token)
 
         return self.client.item_public_token_exchange(request).to_dict()
+    
+    def get_transactions(self, months: int):
+        end_date = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0).date()
+        start_date = end_date.replace(month=end_date.month - months, day=1)
+        
+        request = plaid_api.TransactionsGetRequest(
+            access_token=SECRETS["plaid"]["chase_access_token"] if PRODUCTION_DATA else SECRETS["plaid"]["sandbox_transactions_access_token"],
+            start_date=start_date,
+            end_date=end_date
+        )
+        response = self.client.transactions_get(request)
+        print(response)
+        transactions: list = response['transactions']
+        print(transactions)
+
+        while len(transactions) < response['total_transactions']:
+            request = plaid_api.TransactionsGetRequest(
+                access_token=SECRETS["plaid"]["chase_access_token"] if PRODUCTION_DATA else SECRETS["plaid"]["sandbox_transactions_access_token"],
+                start_date=start_date,
+                end_date=end_date,
+                options=dict(offset=len(transactions))
+            )
+            response = self.client.transactions_get(request)
+            transactions.extend(response['transactions'])
+        
+        df = DataFrame(transactions)
+        print(df)
+        return df
+
 
 
 class Categories:
@@ -157,37 +186,8 @@ class Categories:
 class Transactions:
     def __init__(self, csv_filename: str, csv_profile: str, months: int = 6) -> None:
         self.plaid = Plaid("Production" if PRODUCTION_DATA else "Sandbox")
-        self.plaid_df = self.get_plaid_transactions(months)
         self.df = self.get_transactions(csv_filename, csv_profile, months)
         self.categorize_transactions()
-
-    def get_plaid_transactions(self, months: int):
-        end_date = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0).date()
-        start_date = end_date.replace(month=end_date.month - months, day=1)
-        
-        request = plaid_api.TransactionsGetRequest(
-            access_token=SECRETS["plaid"]["chase_access_token"] if PRODUCTION_DATA else SECRETS["plaid"]["sandbox_transactions_access_token"],
-            start_date=start_date,
-            end_date=end_date
-        )
-        response = self.plaid.client.transactions_get(request)
-        print(response)
-        transactions: list = response['transactions']
-        print(transactions)
-
-        while len(transactions) < response['total_transactions']:
-            request = plaid_api.TransactionsGetRequest(
-                access_token=SECRETS["plaid"]["chase_access_token"] if PRODUCTION_DATA else SECRETS["plaid"]["sandbox_transactions_access_token"],
-                start_date=start_date,
-                end_date=end_date,
-                options=dict(offset=len(transactions))
-            )
-            response = self.plaid.client.transactions_get(request)
-            transactions.extend(response['transactions'])
-        
-        df = DataFrame(transactions)
-        print(df)
-        return df
 
     def get_transactions(self, csv_filename: str, csv_profile: str, months: int) -> DataFrame:
         end = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0)

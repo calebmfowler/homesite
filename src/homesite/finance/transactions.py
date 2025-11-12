@@ -31,7 +31,4 @@ if "transactions" in sest:
 
     st.markdown("## Tabulation")
     st.dataframe(sest.transactions.df.sort_values(by="date", ascending=False).drop(["number", "color"], axis=1))
-
-
-    st.markdown("## Plaid Tabulation")
-    st.dataframe(sest.transactions.plaid_df)
+    

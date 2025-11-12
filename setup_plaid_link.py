@@ -5,7 +5,7 @@ from threading import Thread
 import time
 import webbrowser
 
-plaid = Plaid("Sandbox") # Select from "Production", "Sandbox"
+plaid = Plaid("Production") # Select from "Production", "Sandbox"
 
 link_type = ["transactions"] # Select from ["investments", "liabilities", "transactions"]
 

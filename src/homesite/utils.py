@@ -5,7 +5,7 @@ import tomllib
 
 APP_ROOT = Path(__file__).resolve().parents[2]
 
-PRODUCTION_ENV = os.getenv("STREAMLIT_SERVER_HEADLESS") == "true"
+PRODUCTION_ENV = not os.path.exists(APP_ROOT / "secrets.toml")
 
 if PRODUCTION_ENV:
     SECRETS = st.secrets
