@@ -1,6 +1,7 @@
 from homesite.utils import APP_ROOT, PRODUCTION_DATA, PRODUCTION_ENV, SECRETS
 
-from datetime import datetime
+from datetime import datetime, date, timedelta
+from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
@@ -43,8 +44,8 @@ class Plaid:
         return self.client.item_public_token_exchange(request).to_dict()
     
     def get_transactions(self, months: int):
-        end_date = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0).date()
-        start_date = end_date.replace(month=end_date.month - months, day=1)
+        end_date = date.today().replace(day=1)
+        start_date = end_date - relativedelta(months=months)
         
         request = plaid_api.TransactionsGetRequest(
             access_token=SECRETS["plaid"]["chase_access_token"] if PRODUCTION_DATA else SECRETS["plaid"]["sandbox_transactions_access_token"],
@@ -184,14 +185,14 @@ class Categories:
 
 
 class Transactions:
-    def __init__(self, csv_filename: str, csv_profile: str, months: int = 6) -> None:
+    def __init__(self, csv_filename: str, csv_profile: str, months: int = -1) -> None:
         self.plaid = Plaid("Production" if PRODUCTION_DATA else "Sandbox")
         self.df = self.get_transactions(csv_filename, csv_profile, months)
         self.categorize_transactions()
 
     def get_transactions(self, csv_filename: str, csv_profile: str, months: int) -> DataFrame:
-        end = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        start = end.replace(month=end.month - months, day=1)
+        end_date = date.today().replace(day=1)
+        start_date = end_date - relativedelta(months=months)
         
         if csv_profile == "chase":
             df = pd.read_csv(APP_ROOT / "data" / csv_filename, usecols=range(1, 7)).reset_index(drop=True)
@@ -213,7 +214,10 @@ class Transactions:
         else:
             raise ValueError(f"Unknown csv_profile: {csv_profile}")
         
-        return df[(df["date"] >= start) & (df["date"] <= end)]
+        if months != -1:
+            df = df[(df["date"] >= start_date) & (df["date"] <= end_date)]
+
+        return df
     
     def categorize_transactions(self) -> None:
         self.df["category"] = [[]] * len(self.df)
